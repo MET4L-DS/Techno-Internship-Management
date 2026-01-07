@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>ManageThem - Attendance Dashboard (Google Sheets Backend)</title>
+
+		<link
+			href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap"
+			rel="stylesheet"
+		/>
+		<link
+			rel="stylesheet"
+			href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+		/>
+
+		<!-- Map Dependency @Atul Prakash -->
+		<link
+			rel="stylesheet"
+			href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+			integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+			crossorigin=""
+		/>
+		<script
+			src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+			integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+			crossorigin=""
+		></script>
+
+		<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+
+		<style>
+			:root {
+				--primary: #4a90e2;
+				--primary-hover: #357abd;
+				--bg-gradient: linear-gradient(
+					135deg,
+					#f5f7fa 0%,
+					#c3cfe2 100%
+				);
+				--surface: #ffffff;
+				--text-main: #2d3436;
+				--text-muted: #636e72;
+				--border: #dfe6e9;
+				--shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+				--toggle-icon: "🌙";
+				--card-bg: #ffffff;
+				--success: #00b894;
+			}
+
+			body.dark-mode {
+				--primary: #5fa8ff;
+				--bg-gradient: linear-gradient(
+					135deg,
+					#0f2027 0%,
+					#203a43 50%,
+					#2c5364 100%
+				);
+				--surface: #1e1e1e;
+				--text-main: #e0e0e0;
+				--text-muted: #a0a0a0;
+				--border: #444;
+				--shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+				--toggle-icon: "☀️";
+				--card-bg: #2d2d2d;
+			}
+
+			body {
+				font-family: "Poppins", sans-serif;
+				background: var(--bg-gradient);
+				margin: 0;
+				padding: 15px;
+				color: var(--text-main);
+				min-height: 100vh;
+				transition: all 0.3s ease;
+			}
+
+			.container {
+				max-width: 900px;
+				margin: 40px auto;
+				background: var(--surface);
+				padding: 30px;
+				border-radius: 20px;
+				box-shadow: var(--shadow);
+				position: relative;
+			}
+
+			/* Loading overlay */
+			.loading-overlay {
+				position: fixed;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				background: rgba(0, 0, 0, 0.7);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				z-index: 9999;
+			}
+
+			.spinner {
+				border: 4px solid rgba(255, 255, 255, 0.3);
+				border-top: 4px solid #fff;
+				border-radius: 50%;
+				width: 50px;
+				height: 50px;
+				animation: spin 1s linear infinite;
+			}
+
+			@keyframes spin {
+				0% {
+					transform: rotate(0deg);
+				}
+				100% {
+					transform: rotate(360deg);
+				}
+			}
+
+			/* --- NAVIGATION --- */
+			.nav-header {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				margin-bottom: 30px;
+			}
+
+			.back-btn {
+				text-decoration: none;
+				color: var(--text-muted);
+				font-size: 14px;
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				transition: color 0.2s;
+			}
+
+			.back-btn:hover {
+				color: var(--primary);
+			}
+
+			.grid-layout {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: 25px;
+			}
+
+			@media (max-width: 768px) {
+				.grid-layout {
+					grid-template-columns: 1fr;
+				}
+			}
+
+			.dash-card {
+				background: var(--card-bg);
+				border: 1px solid var(--border);
+				border-radius: 16px;
+				padding: 20px;
+				text-align: center;
+			}
+
+			.action-btn {
+				background: var(--primary);
+				color: white;
+				border: none;
+				padding: 15px 20px;
+				border-radius: 12px;
+				font-size: 15px;
+				font-weight: 600;
+				cursor: pointer;
+				width: 100%;
+				transition: 0.3s;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 10px;
+				margin-bottom: 10px;
+			}
+
+			.secondary-btn {
+				background: transparent;
+				border: 1px solid var(--border);
+				color: var(--text-main);
+			}
+
+			.action-btn:hover:not(:disabled) {
+				transform: translateY(-2px);
+				filter: brightness(1.1);
+			}
+			.action-btn:disabled {
+				background: #ccc;
+				cursor: not-allowed;
+				opacity: 0.7;
+			}
+
+			.hidden {
+				display: none !important;
+			}
+
+			#camera-preview {
+				width: 100%;
+				border-radius: 12px;
+				margin-top: 15px;
+				background: #000;
+				aspect-ratio: 4/3;
+				object-fit: cover;
+			}
+
+			.signature-container {
+				border: 1px dashed var(--border);
+				border-radius: 8px;
+				margin: 15px 0;
+				background: #fff;
+			}
+
+			canvas#signature-pad {
+				width: 100%;
+				height: 140px;
+			}
+
+			.verification-data {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: 10px;
+				font-size: 11px;
+				color: var(--text-muted);
+				margin-top: 15px;
+				padding: 10px;
+				background: rgba(0, 0, 0, 0.03);
+				border-radius: 8px;
+			}
+
+			.chart-container {
+				position: relative;
+				height: 220px;
+				width: 220px;
+				margin: 0 auto;
+			}
+			.chart-label {
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				text-align: center;
+			}
+			.chart-label span {
+				font-size: 24px;
+				font-weight: 700;
+				color: var(--primary);
+			}
+
+			.theme-toggle {
+				background: transparent;
+				border: 2px solid var(--border);
+				border-radius: 50%;
+				width: 35px;
+				height: 35px;
+				cursor: pointer;
+				color: var(--text-main);
+			}
+			.theme-toggle::after {
+				content: var(--toggle-icon);
+			}
+		</style>
+	</head>
+	<body>
+		<div class="loading-overlay hidden" id="loadingOverlay">
+			<div class="spinner"></div>
+		</div>
+
+		<div class="container">
+			<div class="nav-header">
+				<a href="studentDashboard.html" class="back-btn">
+					<i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+				</a>
+				<button class="theme-toggle" id="themeBtn"></button>
+			</div>
+
+			<header style="text-align: center; margin-bottom: 30px">
+				<h2 style="margin: 0">Attendance System</h2>
+				<p style="color: var(--text-muted); font-size: 14px">
+					Real-time Secure Verification (Cloud-Powered)
+				</p>
+			</header>
+
+			<div class="grid-layout">
+				<div class="dash-card">
+					<h3 style="margin-top: 0">
+						<i class="fa-solid fa-calendar-check"></i> Marking
+					</h3>
+
+					<div id="status-message" class="hidden">
+						<i
+							class="fa-solid fa-circle-check"
+							style="
+								color: var(--success);
+								font-size: 40px;
+								margin-bottom: 10px;
+							"
+						></i>
+						<p><strong>Attendance Recorded!</strong></p>
+						<button
+							class="action-btn secondary-btn"
+							onclick="location.reload()"
+						>
+							<i class="fa-solid fa-rotate-right"></i> Refresh
+							Status
+						</button>
+					</div>
+
+					<div id="attendance-area">
+						<button class="action-btn" id="mark-attendance-btn">
+							<i class="fa-solid fa-fingerprint"></i> Mark My
+							Attendance
+						</button>
+
+						<div id="verification-steps" class="hidden">
+							<video
+								id="camera-preview"
+								autoplay
+								playsinline
+							></video>
+
+							<div class="signature-container">
+								<p
+									style="
+										font-size: 11px;
+										margin: 5px 0;
+										color: #666;
+									"
+								>
+									Provide Signature:
+								</p>
+								<canvas id="signature-pad"></canvas>
+							</div>
+
+							<div
+								class="verification-data"
+								style="display: block"
+							>
+								<div
+									id="mini-map"
+									style="
+										height: 150px;
+										width: 100%;
+										border-radius: 6px;
+										margin-bottom: 8px;
+										border: 1px solid var(--border);
+									"
+								></div>
+								<div
+									style="
+										display: flex;
+										justify-content: space-between;
+									"
+								>
+									<span
+										><i
+											class="fa-solid fa-location-arrow"
+										></i>
+										<span id="loc">Locating...</span></span
+									>
+									<span
+										><i class="fa-solid fa-cloud"></i>
+										<span id="weath">--°C</span></span
+									>
+								</div>
+							</div>
+
+							<button
+								class="action-btn"
+								id="submit-btn"
+								style="
+									background: var(--success);
+									margin-top: 15px;
+								"
+							>
+								Submit Attendance
+							</button>
+
+							<button
+								class="action-btn secondary-btn"
+								id="new-attendance-btn"
+							>
+								<i class="fa-solid fa-plus"></i> Clear & Retry
+							</button>
+						</div>
+					</div>
+				</div>
+
+				<div class="dash-card">
+					<h3 style="margin-top: 0">
+						<i class="fa-solid fa-chart-simple"></i> Summary
+					</h3>
+					<div class="chart-container">
+						<canvas id="attendanceChart"></canvas>
+						<div class="chart-label">
+							<span id="percent-val">0%</span>
+						</div>
+					</div>
+					<div
+						style="
+							margin-top: 20px;
+							display: grid;
+							grid-template-columns: 1fr 1fr;
+							border-top: 1px solid var(--border);
+							padding-top: 15px;
+						"
+					>
+						<div>
+							<small style="color: var(--text-muted)"
+								>Present</small
+							><br /><strong id="p-count">0</strong>
+						</div>
+						<div>
+							<small style="color: var(--text-muted)"
+								>Absent</small
+							><br /><strong id="a-count">0</strong>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<script>
+			// ========== CONFIGURATION ==========
+			// IMPORTANT: Replace this with your Google Apps Script Web App URL
+			const SCRIPT_URL =
+				"https://script.google.com/macros/s/AKfycbymTY8hN8f2zDA66SRsAnW_w4LV6bxRjKzFxngUlld21K0ANXTlYi1zlqQLIzkMgeU23Q/exec";
+			const STUDENT_ID = "STU001"; // This should come from login session
+			const STUDENT_NAME = "Ayanshu"; // This should come from login session
+
+			// ========== DOM ELEMENTS ==========
+			const elements = {
+				markBtn: document.getElementById("mark-attendance-btn"),
+				newBtn: document.getElementById("new-attendance-btn"),
+				submitBtn: document.getElementById("submit-btn"),
+				steps: document.getElementById("verification-steps"),
+				status: document.getElementById("status-message"),
+				themeBtn: document.getElementById("themeBtn"),
+				video: document.getElementById("camera-preview"),
+				loading: document.getElementById("loadingOverlay"),
+			};
+
+			// Store location and signature data
+			let attendanceData = {
+				location: { lat: 0, lng: 0 },
+				weather: "",
+				signatureData: "",
+				photoData: "",
+			};
+
+			// ========== API FUNCTIONS ==========
+
+			/**
+			 * Show/hide loading overlay
+			 */
+			function setLoading(isLoading) {
+				elements.loading.classList.toggle("hidden", !isLoading);
+			}
+
+			/**
+			 * Check if attendance is already marked today
+			 */
+			async function checkTodayAttendance() {
+				try {
+					// First check localStorage for quick response
+					const markedDate = localStorage.getItem(
+						"attendance_marked_date"
+					);
+					const today = new Date().toDateString();
+
+					if (markedDate === today) {
+						elements.markBtn.classList.add("hidden");
+						elements.status.classList.remove("hidden");
+						return;
+					}
+
+					setLoading(true);
+					const response = await fetch(
+						`${SCRIPT_URL}?action=checkTodayAttendance&studentId=${STUDENT_ID}&t=${Date.now()}`,
+						{ cache: "no-cache" } // Prevent caching
+					);
+					const result = await response.json();
+
+					if (result.success && result.data.isMarked) {
+						localStorage.setItem("attendance_marked_date", today);
+						elements.markBtn.classList.add("hidden");
+						elements.status.classList.remove("hidden");
+					} else {
+						// Clear old localStorage if not marked
+						localStorage.removeItem("attendance_marked_date");
+					}
+
+					setLoading(false);
+				} catch (error) {
+					console.error("Error checking attendance:", error);
+					setLoading(false);
+					// Don't show alert on initial load, just use default state
+				}
+			}
+
+			/**
+			 * Get student statistics from server
+			 */
+			async function getStudentStats() {
+				try {
+					setLoading(true);
+					// Add timestamp to prevent any caching
+					const response = await fetch(
+						`${SCRIPT_URL}?action=getStudentStats&studentId=${STUDENT_ID}&t=${Date.now()}`,
+						{ cache: "no-cache" } // Prevent caching
+					);
+					const result = await response.json();
+
+					console.log("Stats received:", result);
+
+					if (result.success) {
+						const data = result.data;
+						console.log("Updating chart with:", data);
+						updateChart(
+							data.presentCount,
+							data.absentCount,
+							data.percentage
+						);
+					} else {
+						console.warn("Stats request failed:", result.message);
+						// Fallback to default values
+						updateChart(0, 0, 0);
+					}
+
+					setLoading(false);
+				} catch (error) {
+					console.error("Error fetching stats:", error);
+					setLoading(false);
+					// Fallback to default values
+					updateChart(0, 0, 0);
+				}
+			}
+
+			/**
+			 * Submit attendance to Google Sheets
+			 */
+			async function submitAttendance() {
+				if (window.sigPad.isEmpty()) {
+					alert("Signature required!");
+					return;
+				}
+
+				setLoading(true);
+
+				try {
+					// Get signature as base64
+					attendanceData.signatureData = window.sigPad.toDataURL();
+
+					// Prepare data
+					const payload = {
+						action: "markAttendance",
+						studentId: STUDENT_ID,
+						studentName: STUDENT_NAME,
+						location: attendanceData.location,
+						weather: attendanceData.weather,
+						signatureData: attendanceData.signatureData,
+						photoData: attendanceData.photoData,
+					};
+
+					// Send to Google Apps Script
+					await fetch(SCRIPT_URL, {
+						method: "POST",
+						mode: "no-cors", // Required for Apps Script
+						headers: {
+							"Content-Type": "application/json",
+						},
+						body: JSON.stringify(payload),
+					});
+
+					// Mark as completed in localStorage to persist state
+					localStorage.setItem(
+						"attendance_marked_date",
+						new Date().toDateString()
+					);
+
+					// Wait 2 seconds for data to be fully saved and processed
+					await new Promise((resolve) => setTimeout(resolve, 2000));
+
+					// Hide verification steps and show success
+					elements.steps.classList.add("hidden");
+					elements.markBtn.classList.add("hidden");
+					elements.status.classList.remove("hidden");
+
+					// Refresh stats once
+					await getStudentStats();
+
+					setLoading(false);
+				} catch (error) {
+					console.error("Error submitting attendance:", error);
+					setLoading(false);
+					alert("Error submitting attendance. Please try again.");
+				}
+			}
+
+			/**
+			 * Convert Open-Meteo weather code to description
+			 */
+			function getWeatherDescription(code) {
+				const weatherCodes = {
+					0: "Clear",
+					1: "Mostly Clear",
+					2: "Partly Cloudy",
+					3: "Overcast",
+					45: "Foggy",
+					48: "Icy Fog",
+					51: "Light Drizzle",
+					53: "Drizzle",
+					55: "Heavy Drizzle",
+					61: "Light Rain",
+					63: "Rain",
+					65: "Heavy Rain",
+					71: "Light Snow",
+					73: "Snow",
+					75: "Heavy Snow",
+					80: "Light Showers",
+					81: "Showers",
+					82: "Heavy Showers",
+					95: "Thunderstorm",
+					96: "Hail Storm",
+					99: "Heavy Hail",
+				};
+				return weatherCodes[code] || "Unknown";
+			}
+
+			/**
+			 * Update chart with new data
+			 */
+			function updateChart(presentCount, absentCount, percentage) {
+				// Handle undefined/null values with defaults
+				presentCount = presentCount || 0;
+				absentCount = absentCount || 0;
+				percentage = percentage || 0;
+
+				document.getElementById("p-count").innerText = presentCount;
+				document.getElementById("a-count").innerText = absentCount;
+				document.getElementById("percent-val").innerText =
+					percentage + "%";
+
+				// Destroy existing chart if it exists and has destroy method
+				if (
+					window.attendanceChart &&
+					typeof window.attendanceChart.destroy === "function"
+				) {
+					window.attendanceChart.destroy();
+				}
+
+				// Create new chart
+				window.attendanceChart = new Chart(
+					document.getElementById("attendanceChart"),
+					{
+						type: "doughnut",
+						data: {
+							datasets: [
+								{
+									data: [presentCount, absentCount],
+									backgroundColor: ["#4a90e2", "#dfe6e9"],
+									borderWidth: 0,
+								},
+							],
+						},
+						options: {
+							cutout: "85%",
+							plugins: { legend: { display: false } },
+						},
+					}
+				);
+			}
+
+			// ========== EVENT HANDLERS ==========
+
+			// Mark Attendance Button
+			elements.markBtn.addEventListener("click", async () => {
+				elements.markBtn.classList.add("hidden");
+				elements.steps.classList.remove("hidden");
+
+				// Initialize Camera
+				try {
+					const stream = await navigator.mediaDevices.getUserMedia({
+						video: true,
+					});
+					elements.video.srcObject = stream;
+
+					// Optional: Capture photo after 2 seconds
+					setTimeout(() => {
+						const canvas = document.createElement("canvas");
+						canvas.width = elements.video.videoWidth;
+						canvas.height = elements.video.videoHeight;
+						canvas.getContext("2d").drawImage(elements.video, 0, 0);
+						attendanceData.photoData = canvas.toDataURL(
+							"image/jpeg",
+							0.5
+						);
+					}, 2000);
+				} catch (e) {
+					alert("Camera error: " + e.message);
+				}
+
+				// Get Geolocation
+				navigator.geolocation.getCurrentPosition(async (p) => {
+					const lat = p.coords.latitude;
+					const lng = p.coords.longitude;
+
+					attendanceData.location = { lat, lng };
+
+					// Initialize Map
+					if (!window.attMap) {
+						window.attMap = L.map("mini-map").setView(
+							[lat, lng],
+							15
+						);
+						L.tileLayer(
+							"https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+						).addTo(window.attMap);
+						L.marker([lat, lng]).addTo(window.attMap);
+					} else {
+						window.attMap.setView([lat, lng], 15);
+					}
+
+					document.getElementById("loc").innerHTML = `${lat.toFixed(
+						2
+					)}, ${lng.toFixed(2)}`;
+
+					// Fetch real weather data from Open-Meteo API (free, no API key required)
+					try {
+						const weatherRes = await fetch(
+							`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`
+						);
+						const weatherData = await weatherRes.json();
+						const temp = Math.round(
+							weatherData.current_weather.temperature
+						);
+						const weatherCode =
+							weatherData.current_weather.weathercode;
+						const weatherDesc = getWeatherDescription(weatherCode);
+						attendanceData.weather = `${temp}°C ${weatherDesc}`;
+					} catch (e) {
+						console.error("Weather fetch error:", e);
+						attendanceData.weather = "N/A";
+					}
+					document.getElementById("weath").innerText =
+						attendanceData.weather;
+				});
+
+				// Initialize Signature Pad
+				const canvas = document.getElementById("signature-pad");
+				window.sigPad = new SignaturePad(canvas);
+				canvas.width = canvas.offsetWidth;
+				canvas.height = canvas.offsetHeight;
+			});
+
+			// Clear & Retry Button
+			elements.newBtn.addEventListener("click", () => {
+				if (window.sigPad) {
+					window.sigPad.clear();
+				}
+				alert(
+					"Verification cleared. You can now re-capture your data."
+				);
+			});
+
+			// Submit Button
+			elements.submitBtn.addEventListener("click", submitAttendance);
+
+			// Theme Toggle
+			elements.themeBtn.addEventListener("click", () => {
+				document.body.classList.toggle("dark-mode");
+				localStorage.setItem(
+					"theme",
+					document.body.classList.contains("dark-mode")
+						? "dark"
+						: "light"
+				);
+			});
+
+			// ========== INITIALIZATION ==========
+
+			// Apply saved theme
+			if (localStorage.getItem("theme") === "dark") {
+				document.body.classList.add("dark-mode");
+			}
+
+			// Load data on page load
+			window.addEventListener("load", async () => {
+				// Initialize chart with default values after DOM is fully loaded
+				updateChart(0, 0, 0);
+
+				await checkTodayAttendance();
+				await getStudentStats();
+			});
+		</script>
+	</body>
+</html>

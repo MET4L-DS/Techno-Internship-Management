@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Attendance System - Verification Test</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				max-width: 800px;
+				margin: 50px auto;
+				padding: 20px;
+				background: #f5f5f5;
+			}
+			.container {
+				background: white;
+				padding: 30px;
+				border-radius: 10px;
+				box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+			}
+			button {
+				background: #4a90e2;
+				color: white;
+				border: none;
+				padding: 12px 24px;
+				border-radius: 6px;
+				cursor: pointer;
+				margin: 10px 5px;
+				font-size: 16px;
+			}
+			button:hover {
+				background: #357abd;
+			}
+			.result {
+				margin-top: 20px;
+				padding: 15px;
+				background: #f9f9f9;
+				border-left: 4px solid #4a90e2;
+				border-radius: 4px;
+			}
+			.success {
+				border-left-color: #00b894;
+				background: #e8f8f5;
+			}
+			.error {
+				border-left-color: #e74c3c;
+				background: #fadbd8;
+			}
+			pre {
+				background: #2d2d2d;
+				color: #f8f8f2;
+				padding: 15px;
+				border-radius: 6px;
+				overflow-x: auto;
+			}
+			h2 {
+				color: #2d3436;
+			}
+			.status {
+				display: inline-block;
+				padding: 4px 12px;
+				border-radius: 4px;
+				font-weight: bold;
+				margin-left: 10px;
+			}
+			.status.match {
+				background: #00b894;
+				color: white;
+			}
+			.status.mismatch {
+				background: #e74c3c;
+				color: white;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<h1>🔍 Attendance System Verification</h1>
+			<p>
+				Use this page to verify your Google Apps Script deployment and
+				data integrity.
+			</p>
+
+			<div>
+				<label for="scriptUrl">Apps Script URL:</label><br />
+				<input
+					type="text"
+					id="scriptUrl"
+					style="width: 100%; padding: 8px; margin: 10px 0"
+					value="https://script.google.com/macros/s/AKfycbymTY8hN8f2zDA66SRsAnW_w4LV6bxRjKzFxngUlld21K0ANXTlYi1zlqQLIzkMgeU23Q/exec"
+				/>
+			</div>
+
+			<div>
+				<label for="studentId">Student ID:</label><br />
+				<input
+					type="text"
+					id="studentId"
+					style="width: 200px; padding: 8px; margin: 10px 0"
+					value="STU001"
+				/>
+			</div>
+
+			<div style="margin: 20px 0">
+				<button onclick="testGetStats()">📊 Test Get Stats</button>
+				<button onclick="testVerifyData()">
+					🔎 Verify Data Integrity
+				</button>
+				<button onclick="testCheckToday()">
+					📅 Check Today's Attendance
+				</button>
+			</div>
+
+			<div id="results"></div>
+		</div>
+
+		<script>
+			function getScriptUrl() {
+				return document.getElementById("scriptUrl").value;
+			}
+
+			function getStudentId() {
+				return document.getElementById("studentId").value;
+			}
+
+			function showResult(title, data, isSuccess = true) {
+				const resultsDiv = document.getElementById("results");
+				const className = isSuccess ? "success" : "error";
+				resultsDiv.innerHTML = `
+                <div class="result ${className}">
+                    <h2>${title}</h2>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                </div>
+            `;
+			}
+
+			async function testGetStats() {
+				try {
+					const url = `${getScriptUrl()}?action=getStudentStats&studentId=${getStudentId()}&t=${Date.now()}`;
+					const response = await fetch(url);
+					const result = await response.json();
+					showResult(
+						"📊 Get Student Stats Result",
+						result,
+						result.success
+					);
+				} catch (error) {
+					showResult("❌ Error", { error: error.message }, false);
+				}
+			}
+
+			async function testVerifyData() {
+				try {
+					const url = `${getScriptUrl()}?action=verifyData&studentId=${getStudentId()}&t=${Date.now()}`;
+					const response = await fetch(url);
+					const result = await response.json();
+
+					const match = result.data.sheetsMatch;
+					const statusHtml = match
+						? '<span class="status match">✓ MATCH</span>'
+						: '<span class="status mismatch">✗ MISMATCH</span>';
+
+					const resultsDiv = document.getElementById("results");
+					resultsDiv.innerHTML = `
+                    <div class="result ${result.success ? "success" : "error"}">
+                        <h2>🔎 Data Verification Result ${statusHtml}</h2>
+                        <p><strong>Students Sheet Shows:</strong> ${
+							result.data.studentsSheetData.totalPresent
+						} Present</p>
+                        <p><strong>Attendance Records Count:</strong> ${
+							result.data.attendanceRecordsCount
+						} Records</p>
+                        <p><strong>Match Status:</strong> ${
+							match
+								? "Data is synchronized ✓"
+								: "Data is OUT OF SYNC ✗"
+						}</p>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    </div>
+                `;
+				} catch (error) {
+					showResult("❌ Error", { error: error.message }, false);
+				}
+			}
+
+			async function testCheckToday() {
+				try {
+					const url = `${getScriptUrl()}?action=checkTodayAttendance&studentId=${getStudentId()}&t=${Date.now()}`;
+					const response = await fetch(url);
+					const result = await response.json();
+					showResult(
+						"📅 Check Today's Attendance Result",
+						result,
+						result.success
+					);
+				} catch (error) {
+					showResult("❌ Error", { error: error.message }, false);
+				}
+			}
+		</script>
+	</body>
+</html>

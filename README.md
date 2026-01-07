@@ -404,6 +404,165 @@ Modify CSS custom properties in `:root` and `body.dark-mode`
 -   Check browser console for errors
 -   Ensure canvas element exists
 
+## Google Sheets Backend Integration
+
+### Overview
+
+The system can be integrated with Google Sheets using Google Apps Script as a serverless backend. This provides:
+
+-   Cloud-based data storage
+-   Real-time synchronization
+-   No server setup required
+-   Free hosting (within Google's quotas)
+
+### Setup Instructions
+
+#### 1. Create Google Spreadsheet
+
+1. Go to [Google Sheets](https://sheets.google.com)
+2. Create a new spreadsheet named "Attendance Management"
+3. Note the Spreadsheet ID from the URL
+
+#### 2. Deploy Apps Script
+
+1. In your spreadsheet, go to **Extensions > Apps Script**
+2. Delete any existing code
+3. Copy the entire content from `Code.gs` file
+4. Click **Save** (💾 icon)
+5. Name your project "Attendance API"
+
+#### 3. Run Setup Function
+
+1. In Apps Script editor, select `setupSpreadsheet` from function dropdown
+2. Click **Run** (▶️ icon)
+3. Grant necessary permissions when prompted
+4. Two sheets will be created: "Attendance Records" and "Students"
+
+#### 4. Deploy as Web App
+
+1. Click **Deploy > New deployment**
+2. Click **Select type** ⚙️ > **Web app**
+3. Configure:
+    - **Description**: "Attendance API v1"
+    - **Execute as**: Me
+    - **Who has access**: Anyone
+4. Click **Deploy**
+5. **Copy the Web App URL** - you'll need this!
+
+#### 5. Update HTML File
+
+1. Open `attendanceMenu-GoogleSheets.html`
+2. Find line: `const SCRIPT_URL = 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE';`
+3. Replace with your copied Web App URL
+4. Update `STUDENT_ID` and `STUDENT_NAME` with actual values
+
+#### 6. Test the Integration
+
+1. Open `attendanceMenu-GoogleSheets.html` in browser
+2. Mark attendance
+3. Check your Google Sheet - new row should appear!
+
+### API Endpoints
+
+#### GET Requests
+
+```javascript
+// Check if attendance marked today
+GET: ?action=checkTodayAttendance&studentId=STU001
+
+// Get student statistics
+GET: ?action=getStudentStats&studentId=STU001
+
+// Get all records for student
+GET: ?action=getAllRecords&studentId=STU001
+```
+
+#### POST Requests
+
+```javascript
+// Mark attendance
+POST: {
+  action: 'markAttendance',
+  studentId: 'STU001',
+  studentName: 'John Doe',
+  location: { lat: 28.6139, lng: 77.2090 },
+  weather: '25°C Clear',
+  signatureData: 'base64_string',
+  photoData: 'base64_string'
+}
+```
+
+### Data Schema
+
+#### Attendance Records Sheet
+
+| Column         | Type     | Description               |
+| -------------- | -------- | ------------------------- |
+| Timestamp      | DateTime | When record was created   |
+| Student ID     | String   | Unique student identifier |
+| Student Name   | String   | Full name                 |
+| Date           | Date     | Attendance date           |
+| Location (Lat) | Number   | GPS latitude              |
+| Location (Lng) | Number   | GPS longitude             |
+| Weather        | String   | Weather info              |
+| Signature Data | String   | Base64 signature image    |
+| Photo Data     | String   | Base64 photo              |
+| Status         | String   | Present/Absent            |
+
+#### Students Sheet
+
+| Column        | Type   | Description       |
+| ------------- | ------ | ----------------- |
+| Student ID    | String | Unique identifier |
+| Name          | String | Full name         |
+| Email         | String | Email address     |
+| Total Present | Number | Days present      |
+| Total Absent  | Number | Days absent       |
+| Attendance %  | String | Percentage        |
+
+### Important Notes
+
+⚠️ **CORS Limitations**: Google Apps Script requires `mode: 'no-cors'` which means you can't read the response directly. The script assumes success if no error is thrown.
+
+⚠️ **Quotas**: Google Apps Script has usage quotas:
+
+-   URL Fetch calls: 20,000/day
+-   Script runtime: 6 min/execution
+-   Triggers: 90 min/day
+
+⚠️ **Response Time**: First request may be slow (~2-5 seconds) as script initializes
+
+⚠️ **Image Storage**: Base64 images stored in cells. Large images may hit cell size limits (50,000 characters)
+
+### Troubleshooting Apps Script
+
+**Issue**: "Script function not found"
+
+-   Solution: Make sure you saved the script and refreshed the deployment
+
+**Issue**: "Permission denied"
+
+-   Solution: Re-run setup and grant all requested permissions
+
+**Issue**: "Cannot read property of undefined"
+
+-   Solution: Check that sheet names match exactly: "Attendance Records" and "Students"
+
+**Issue**: Data not appearing in sheet
+
+-   Solution: Check browser console for errors, verify SCRIPT_URL is correct
+
+### Upgrading from localStorage
+
+To migrate existing localStorage data to Google Sheets:
+
+```javascript
+// Run this in browser console on old page
+const present = localStorage.getItem("att_present");
+console.log("Present count:", present);
+// Manually add initial record to Google Sheet
+```
+
 ## Credits
 
 -   **Map Integration**: @Atul Prakash
@@ -412,6 +571,7 @@ Modify CSS custom properties in `:root` and `body.dark-mode`
 -   **Maps**: Leaflet.js with OpenStreetMap tiles
 -   **Charts**: Chart.js
 -   **Signature**: Signature Pad library
+-   **Backend**: Google Apps Script & Google Sheets
 
 ## License
 
@@ -420,5 +580,5 @@ This project is part of the Techno Internship Management system.
 ---
 
 **Last Updated**: January 2026  
-**Version**: 1.0  
+**Version**: 2.0 (Google Sheets Integration)  
 **Author**: ManageThem Team
