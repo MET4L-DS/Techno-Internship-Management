@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ManageThem - Attendance Dashboard</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Map Dependency @Atul Prakash -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --primary-hover: #357abd;
+            --bg-gradient: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            --surface: #ffffff;
+            --text-main: #2d3436;
+            --text-muted: #636e72;
+            --border: #dfe6e9;
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            --toggle-icon: "🌙";
+            --card-bg: #ffffff;
+            --success: #00b894;
+        }
+
+        body.dark-mode {
+            --primary: #5fa8ff;
+            --bg-gradient: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+            --surface: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --border: #444;
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            --toggle-icon: "☀️";
+            --card-bg: #2d2d2d;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: var(--bg-gradient);
+            margin: 0;
+            padding: 15px;
+            color: var(--text-main);
+            min-height: 100vh;
+            transition: all 0.3s ease;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            background: var(--surface);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            position: relative;
+        }
+
+        /* --- NAVIGATION --- */
+        .nav-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .back-btn {
+            text-decoration: none;
+            color: var(--text-muted);
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: color 0.2s;
+        }
+
+        .back-btn:hover { color: var(--primary); }
+
+        .grid-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+        }
+
+        @media (max-width: 768px) { .grid-layout { grid-template-columns: 1fr; } }
+
+        .dash-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .action-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .secondary-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-main);
+        }
+
+        .action-btn:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.1); }
+        .action-btn:disabled { background: #ccc; cursor: not-allowed; opacity: 0.7; }
+
+        .hidden { display: none !important; }
+
+        #camera-preview {
+            width: 100%;
+            border-radius: 12px;
+            margin-top: 15px;
+            background: #000;
+            aspect-ratio: 4/3;
+            object-fit: cover;
+        }
+
+        .signature-container {
+            border: 1px dashed var(--border);
+            border-radius: 8px;
+            margin: 15px 0;
+            background: #fff;
+        }
+
+        canvas#signature-pad { width: 100%; height: 140px; }
+
+        .verification-data {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(0,0,0,0.03);
+            border-radius: 8px;
+        }
+
+        .chart-container { position: relative; height: 220px; width: 220px; margin: 0 auto; }
+        .chart-label {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); text-align: center;
+        }
+        .chart-label span { font-size: 24px; font-weight: 700; color: var(--primary); }
+
+        .theme-toggle {
+            background: transparent;
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            width: 35px; height: 35px;
+            cursor: pointer;
+            color: var(--text-main);
+        }
+        .theme-toggle::after { content: var(--toggle-icon); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="nav-header">
+        <a href="studentDashboard.html" class="back-btn">
+            <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+        </a>
+        <button class="theme-toggle" id="themeBtn"></button>
+    </div>
+
+    <header style="text-align: center; margin-bottom: 30px;">
+        <h2 style="margin:0">Attendance System</h2>
+        <p style="color: var(--text-muted); font-size: 14px;">Real-time Secure Verification</p>
+    </header>
+
+    <div class="grid-layout">
+        <div class="dash-card">
+            <h3 style="margin-top:0"><i class="fa-solid fa-calendar-check"></i> Marking</h3>
+            
+            <div id="status-message" class="hidden">
+                <i class="fa-solid fa-circle-check" style="color: var(--success); font-size: 40px; margin-bottom: 10px;"></i>
+                <p><strong>Attendance Recorded!</strong></p>
+                <button class="action-btn secondary-btn" onclick="location.reload()">
+                    <i class="fa-solid fa-rotate-right"></i> Refresh Status
+                </button>
+            </div>
+
+            <div id="attendance-area">
+                <button class="action-btn" id="mark-attendance-btn">
+                    <i class="fa-solid fa-fingerprint"></i> Mark My Attendance
+                </button>
+
+                <div id="verification-steps" class="hidden">
+                    <video id="camera-preview" autoplay playsinline></video>
+                    
+                    <div class="signature-container">
+                        <p style="font-size: 11px; margin: 5px 0; color: #666;">Provide Signature:</p>
+                        <canvas id="signature-pad"></canvas>
+                    </div>
+
+                    <div class="verification-data" style="display: block;">
+                        <div id="mini-map" style="height: 150px; width: 100%; border-radius: 6px; margin-bottom: 8px; border: 1px solid var(--border);"></div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span><i class="fa-solid fa-location-arrow"></i> <span id="loc">Locating...</span></span>
+                            <span><i class="fa-solid fa-cloud"></i> <span id="weath">--°C</span></span>
+                        </div>
+                    </div>
+
+                    <button class="action-btn" id="submit-btn" style="background: var(--success); margin-top: 15px;">
+                        Submit Attendance
+                    </button>
+                    
+                    <button class="action-btn secondary-btn" id="new-attendance-btn">
+                        <i class="fa-solid fa-plus"></i> New Attendance
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="dash-card">
+            <h3 style="margin-top:0"><i class="fa-solid fa-chart-simple"></i> Summary</h3>
+            <div class="chart-container">
+                <canvas id="attendanceChart"></canvas>
+                <div class="chart-label">
+                    <span id="percent-val">0%</span>
+                </div>
+            </div>
+            <div style="margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--border); padding-top: 15px;">
+                <div><small style="color: var(--text-muted)">Present</small><br><strong id="p-count">0</strong></div>
+                <div><small style="color: var(--text-muted)">Absent</small><br><strong id="a-count">0</strong></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Configuration
+    const TOTAL_DAYS = 22;
+    let presentCount = parseInt(localStorage.getItem('att_present') || "15");
+    const lastDate = localStorage.getItem('att_date');
+    const isMarked = lastDate === new Date().toDateString();
+
+    const elements = {
+        markBtn: document.getElementById('mark-attendance-btn'),
+        newBtn: document.getElementById('new-attendance-btn'),
+        submitBtn: document.getElementById('submit-btn'),
+        steps: document.getElementById('verification-steps'),
+        status: document.getElementById('status-message'),
+        themeBtn: document.getElementById('themeBtn'),
+        video: document.getElementById('camera-preview')
+    };
+
+    // Initialize Page
+    if (isMarked) {
+        elements.markBtn.classList.add('hidden');
+        elements.status.classList.remove('hidden');
+    }
+
+    // Camera & Verification Logic
+    elements.markBtn.addEventListener('click', async () => {
+        elements.markBtn.classList.add('hidden');
+        elements.steps.classList.remove('hidden');
+        
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            elements.video.srcObject = stream;
+        } catch (e) { alert("Camera error: " + e.message); }
+
+        navigator.geolocation.getCurrentPosition(p => {
+            const lat = p.coords.latitude;
+            const lng = p.coords.longitude;
+            
+            if (!window.attMap) {
+                window.attMap = L.map('mini-map').setView([lat, lng], 15);
+                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(window.attMap);
+                L.marker([lat, lng]).addTo(window.attMap);
+            } else {
+                window.attMap.setView([lat, lng], 15);
+            }
+            
+            document.getElementById('loc').innerHTML = `${lat.toFixed(2)}, ${lng.toFixed(2)}`;
+            document.getElementById('weath').innerText = "22°C Clear";
+        });
+
+        // Init Signature
+        const canvas = document.getElementById('signature-pad');
+        window.sigPad = new SignaturePad(canvas);
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+    });
+
+    // New Attendance Button (Resets the current form to try again)
+    elements.newBtn.addEventListener('click', () => {
+        sigPad.clear();
+        // Here we just refresh the view within the verification steps
+        alert("Verification cleared. You can now re-capture your data.");
+    });
+
+    // Submit Logic
+    elements.submitBtn.addEventListener('click', () => {
+        if (sigPad.isEmpty()) return alert("Signature required!");
+        
+        localStorage.setItem('att_present', presentCount + 1);
+        localStorage.setItem('att_date', new Date().toDateString());
+        
+        alert("✅ Your attendance is marked successfully.");
+        location.reload();
+    });
+
+    // Chart Logic
+    const absentCount = TOTAL_DAYS - presentCount;
+    document.getElementById('p-count').innerText = presentCount;
+    document.getElementById('a-count').innerText = absentCount;
+    document.getElementById('percent-val').innerText = Math.round((presentCount/TOTAL_DAYS)*100) + "%";
+
+    new Chart(document.getElementById('attendanceChart'), {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [presentCount, absentCount],
+                backgroundColor: ['#4a90e2', '#dfe6e9'],
+                borderWidth: 0
+            }]
+        },
+        options: { cutout: '85%', plugins: { legend: { display: false } } }
+    });
+
+    // Theme Toggle
+    elements.themeBtn.addEventListener('click', () => {
+        document.body.classList.toggle('dark-mode');
+        localStorage.setItem('theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
+    });
+    if (localStorage.getItem('theme') === 'dark') document.body.classList.add('dark-mode');
+
+</script>
+</body>
+</html>
