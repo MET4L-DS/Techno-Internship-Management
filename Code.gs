@@ -136,9 +136,9 @@ function doPost(e) {
  * @param {Object} data - Attendance data
  */
 function markAttendance(data) {
-	Logger.log("=== MARK ATTENDANCE START ===");
-	Logger.log("Student ID: " + data.studentId);
-	Logger.log("Student Name: " + data.studentName);
+	console.log("=== MARK ATTENDANCE START ===");
+	console.log("Student ID: " + data.studentId);
+	console.log("Student Name: " + data.studentName);
 
 	const ss = SpreadsheetApp.getActiveSpreadsheet();
 	const sheet = ss.getSheetByName(SHEET_NAME);
@@ -146,7 +146,7 @@ function markAttendance(data) {
 	// Check if already marked today
 	const today = new Date().toDateString();
 	const lastRow = sheet.getLastRow();
-	Logger.log("Checking if already marked today: " + today);
+	console.log("Checking if already marked today: " + today);
 
 	if (lastRow > 1) {
 		const dates = sheet.getRange(2, 4, lastRow - 1, 1).getValues();
@@ -155,14 +155,14 @@ function markAttendance(data) {
 		for (let i = 0; i < dates.length; i++) {
 			const recordDate = new Date(dates[i][0]).toDateString();
 			if (recordDate === today && studentIds[i][0] === data.studentId) {
-				Logger.log("Already marked today - aborting");
+				console.log("Already marked today - aborting");
 				return createResponse(false, "Attendance already marked today");
 			}
 		}
 	}
 
 	// Add new attendance record
-	Logger.log("Adding new attendance record...");
+	console.log("Adding new attendance record...");
 	const now = new Date();
 	sheet.appendRow([
 		now, // Timestamp
@@ -181,18 +181,18 @@ function markAttendance(data) {
 	const lastRowNum = sheet.getLastRow();
 	sheet.getRange(lastRowNum, 1).setNumberFormat("yyyy-mm-dd hh:mm:ss");
 	sheet.getRange(lastRowNum, 4).setNumberFormat("yyyy-mm-dd");
-	Logger.log("Attendance record added at row: " + lastRowNum);
+	console.log("Attendance record added at row: " + lastRowNum);
 
 	// Update student statistics
-	Logger.log("Calling updateStudentStats for: " + data.studentId);
+	console.log("Calling updateStudentStats for: " + data.studentId);
 	const updateResult = updateStudentStats(data.studentId);
-	Logger.log("updateStudentStats returned: " + updateResult);
+	console.log("updateStudentStats returned: " + updateResult);
 
 	// Force a small delay to ensure update completes
 	SpreadsheetApp.flush();
 	Utilities.sleep(500);
 
-	Logger.log("=== MARK ATTENDANCE END ===");
+	console.log("=== MARK ATTENDANCE END ===");
 	return createResponse(true, "Attendance marked successfully");
 }
 
@@ -315,44 +315,44 @@ function getAllRecords(studentId) {
  * @param {string} studentId - Student identifier
  */
 function updateStudentStats(studentId) {
-	Logger.log(">>> updateStudentStats called for: " + studentId);
+	console.log(">>> updateStudentStats called for: " + studentId);
 	try {
 		const ss = SpreadsheetApp.getActiveSpreadsheet();
 		const studentsSheet = ss.getSheetByName(STUDENTS_SHEET);
 
 		if (!studentsSheet) {
-			Logger.log("ERROR: Students sheet not found");
+			console.log("ERROR: Students sheet not found");
 			return false;
 		}
 
 		const lastRow = studentsSheet.getLastRow();
-		Logger.log("Students sheet last row: " + lastRow);
+		console.log("Students sheet last row: " + lastRow);
 
 		if (lastRow < 2) {
-			Logger.log("ERROR: No students found in sheet");
+			console.log("ERROR: No students found in sheet");
 			return false;
 		}
 
 		const studentIds = studentsSheet
 			.getRange(2, 1, lastRow - 1, 1)
 			.getValues();
-		Logger.log(
+		console.log(
 			"Student IDs in sheet: " + JSON.stringify(studentIds.flat())
 		);
 
 		// Find student row
 		let studentRow = -1;
 		for (let i = 0; i < studentIds.length; i++) {
-			Logger.log(`Comparing: "${studentIds[i][0]}" === "${studentId}"`);
+			console.log(`Comparing: "${studentIds[i][0]}" === "${studentId}"`);
 			if (studentIds[i][0] === studentId) {
 				studentRow = i + 2;
-				Logger.log("✓ Student found at row: " + studentRow);
+				console.log("✓ Student found at row: " + studentRow);
 				break;
 			}
 		}
 
 		if (studentRow === -1) {
-			Logger.log("ERROR: Student not found: " + studentId);
+			console.log("ERROR: Student not found: " + studentId);
 			return false;
 		}
 
@@ -364,7 +364,7 @@ function updateStudentStats(studentId) {
 		const currentAbsent = currentData[4] || 0; // Column E
 		const totalDays = currentPresent + currentAbsent;
 
-		Logger.log(
+		console.log(
 			`Current stats for ${studentId}: Present=${currentPresent}, Absent=${currentAbsent}, Total=${totalDays}`
 		);
 
@@ -374,25 +374,25 @@ function updateStudentStats(studentId) {
 		const newPercentage =
 			totalDays > 0 ? Math.round((newPresentCount / totalDays) * 100) : 0;
 
-		Logger.log(
+		console.log(
 			`NEW VALUES: Present=${newPresentCount}, Absent=${newAbsentCount}, %=${newPercentage} (Total=${totalDays})`
 		);
 
 		// Update student record
-		Logger.log("Writing to Students sheet row " + studentRow + "...");
+		console.log("Writing to Students sheet row " + studentRow + "...");
 		studentsSheet.getRange(studentRow, 4).setValue(newPresentCount);
 		studentsSheet.getRange(studentRow, 5).setValue(newAbsentCount);
 		studentsSheet.getRange(studentRow, 6).setValue(newPercentage + "%");
 
 		// Force save
 		SpreadsheetApp.flush();
-		Logger.log("SpreadsheetApp.flush() called");
+		console.log("SpreadsheetApp.flush() called");
 
-		Logger.log("✓✓✓ Student stats updated successfully ✓✓✓");
+		console.log("✓✓✓ Student stats updated successfully ✓✓✓");
 		return true;
 	} catch (error) {
-		Logger.log("!!! ERROR in updateStudentStats: " + error.message);
-		Logger.log("Stack trace: " + error.stack);
+		console.log("!!! ERROR in updateStudentStats: " + error.message);
+		console.log("Stack trace: " + error.stack);
 		return false;
 	}
 }
@@ -474,7 +474,7 @@ function createResponse(success, message, data = {}) {
  * Test function to verify setup
  */
 function testAPI() {
-	Logger.log(setupSpreadsheet());
+	console.log(setupSpreadsheet());
 
 	// Test marking attendance
 	const testData = {
@@ -487,72 +487,72 @@ function testAPI() {
 		photoData: "test_photo",
 	};
 
-	Logger.log(markAttendance(testData));
-	Logger.log(getStudentStats("STU001"));
+	console.log(markAttendance(testData));
+	console.log(getStudentStats("STU001"));
 }
 
 /**
  * Direct test to update stats manually
  */
 function testUpdateStats() {
-	Logger.log("========== STARTING MANUAL UPDATE TEST ==========");
+	console.log("========== STARTING MANUAL UPDATE TEST ==========");
 
 	const studentId = "STU001";
-	Logger.log("Testing for student: " + studentId);
+	console.log("Testing for student: " + studentId);
 
 	// Call the update function directly
 	const result = updateStudentStats(studentId);
 
-	Logger.log("Update result: " + result);
-	Logger.log("========== TEST COMPLETE ==========");
+	console.log("Update result: " + result);
+	console.log("========== TEST COMPLETE ==========");
 }
 
 /**
  * Check current state of both sheets
  */
 function checkCurrentState() {
-	Logger.log("========== CHECKING CURRENT STATE ==========");
+	console.log("========== CHECKING CURRENT STATE ==========");
 
 	const ss = SpreadsheetApp.getActiveSpreadsheet();
 	const studentsSheet = ss.getSheetByName(STUDENTS_SHEET);
 	const attendanceSheet = ss.getSheetByName(SHEET_NAME);
 
 	// Students sheet
-	Logger.log("--- Students Sheet ---");
+	console.log("--- Students Sheet ---");
 	const studentData = studentsSheet.getRange(2, 1, 1, 6).getValues()[0];
-	Logger.log("Student ID: " + studentData[0]);
-	Logger.log("Name: " + studentData[1]);
-	Logger.log("Email: " + studentData[2]);
-	Logger.log("Total Present: " + studentData[3]);
-	Logger.log("Total Absent: " + studentData[4]);
-	Logger.log("Percentage: " + studentData[5]);
+	console.log("Student ID: " + studentData[0]);
+	console.log("Name: " + studentData[1]);
+	console.log("Email: " + studentData[2]);
+	console.log("Total Present: " + studentData[3]);
+	console.log("Total Absent: " + studentData[4]);
+	console.log("Percentage: " + studentData[5]);
 
 	// Attendance Records
-	Logger.log("--- Attendance Records ---");
+	console.log("--- Attendance Records ---");
 	const attLastRow = attendanceSheet.getLastRow();
-	Logger.log("Total records (including header): " + attLastRow);
+	console.log("Total records (including header): " + attLastRow);
 
 	if (attLastRow >= 2) {
 		const records = attendanceSheet
 			.getRange(2, 1, attLastRow - 1, 10)
 			.getValues();
-		Logger.log("Total attendance records: " + records.length);
+		console.log("Total attendance records: " + records.length);
 
 		let stu001Count = 0;
 		for (let i = 0; i < records.length; i++) {
 			if (records[i][1] === "STU001") {
 				stu001Count++;
-				Logger.log(
+				console.log(
 					`  Row ${i + 2}: ${records[i][0]} - ${records[i][1]} - ${
 						records[i][9]
 					}`
 				);
 			}
 		}
-		Logger.log("Total STU001 records: " + stu001Count);
+		console.log("Total STU001 records: " + stu001Count);
 	}
 
-	Logger.log("========== STATE CHECK COMPLETE ==========");
+	console.log("========== STATE CHECK COMPLETE ==========");
 }
 
 // ========== WORK LOCATIONS FUNCTIONS ==========
