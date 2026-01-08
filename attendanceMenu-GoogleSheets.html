@@ -314,6 +314,32 @@
 				text-decoration: none;
 			}
 
+			/* Location Validity Status */
+			.location-status {
+				margin-top: 10px;
+				padding: 10px;
+				border-radius: 8px;
+				text-align: center;
+				font-size: 12px;
+				font-weight: 600;
+			}
+
+			.location-status.valid {
+				background: rgba(0, 184, 148, 0.15);
+				color: #00b894;
+				border: 1px solid rgba(0, 184, 148, 0.3);
+			}
+
+			.location-status.invalid {
+				background: rgba(231, 76, 60, 0.15);
+				color: #e74c3c;
+				border: 1px solid rgba(231, 76, 60, 0.3);
+			}
+
+			.location-status i {
+				margin-right: 6px;
+			}
+
 			.theme-toggle {
 				background: transparent;
 				border: 2px solid var(--border);
@@ -467,7 +493,15 @@
 								class="action-btn secondary-btn"
 								id="new-attendance-btn"
 							>
-								<i class="fa-solid fa-plus"></i> Clear & Retry
+								<i class="fa-solid fa-eraser"></i> Clear & Retry
+							</button>
+
+							<button
+								class="action-btn secondary-btn"
+								id="cancel-btn"
+								style="color: #e74c3c; border-color: #e74c3c"
+							>
+								<i class="fa-solid fa-xmark"></i> Cancel
 							</button>
 						</div>
 					</div>
@@ -514,18 +548,28 @@
 				"https://script.google.com/macros/s/AKfycbymTY8hN8f2zDA66SRsAnW_w4LV6bxRjKzFxngUlld21K0ANXTlYi1zlqQLIzkMgeU23Q/exec";
 			const STUDENT_ID = "STU001"; // This should come from login session
 			const STUDENT_NAME = "Ayanshu"; // This should come from login session
+			const MAX_ALLOWED_DISTANCE = 20; // Maximum allowed distance in meters from work location
 
 			// ========== DOM ELEMENTS ==========
 			const elements = {
 				markBtn: document.getElementById("mark-attendance-btn"),
 				newBtn: document.getElementById("new-attendance-btn"),
 				submitBtn: document.getElementById("submit-btn"),
+				cancelBtn: document.getElementById("cancel-btn"),
 				steps: document.getElementById("verification-steps"),
 				status: document.getElementById("status-message"),
 				themeBtn: document.getElementById("themeBtn"),
 				video: document.getElementById("camera-preview"),
 				loading: document.getElementById("loadingOverlay"),
 			};
+
+			// Store camera stream reference
+			let cameraStream = null;
+
+			// Store work locations and validity status
+			let workLocationsData = [];
+			let isLocationValid = false;
+			let nearestLocation = null;
 
 			// Store location and signature data
 			let attendanceData = {
@@ -627,6 +671,25 @@
 			 * Submit attendance to Google Sheets
 			 */
 			async function submitAttendance() {
+				// Check location validity first
+				if (!isLocationValid) {
+					const errorMsg =
+						workLocationsData.length === 0
+							? "No work locations configured. Please add at least one work location before marking attendance."
+							: `You must be within ${MAX_ALLOWED_DISTANCE} meters of a work location to mark attendance.\n\nNearest location: ${
+									nearestLocation
+										? nearestLocation.name +
+										  " (" +
+										  formatDistance(
+												nearestLocation.distance
+										  ) +
+										  " away)"
+										: "Unknown"
+							  }`;
+					alert(errorMsg);
+					return;
+				}
+
 				if (window.sigPad.isEmpty()) {
 					alert("Signature required!");
 					return;
@@ -667,6 +730,9 @@
 
 					// Wait 2 seconds for data to be fully saved and processed
 					await new Promise((resolve) => setTimeout(resolve, 2000));
+
+					// Stop the camera
+					stopCamera();
 
 					// Hide verification steps and show success
 					elements.steps.classList.add("hidden");
@@ -754,59 +820,131 @@
 			/**
 			 * Load work locations and display distances
 			 */
-			function displayWorkLocationDistances(currentLat, currentLng) {
+			async function displayWorkLocationDistances(
+				currentLat,
+				currentLng
+			) {
 				const container = document.getElementById(
 					"work-locations-distance"
 				);
 				const listEl = document.getElementById("distance-list");
 
-				// Load saved work locations from localStorage
-				const stored = localStorage.getItem("work_locations");
-				const workLocations = stored ? JSON.parse(stored) : [];
-
-				if (workLocations.length === 0) {
-					container.style.display = "block";
-					listEl.innerHTML = `
-						<div class="no-locations-msg">
-							<i class="fa-solid fa-info-circle"></i> No work locations saved.
-							<br><a href="workLocations.html">Add work locations</a>
-						</div>
-					`;
-					return;
-				}
-
-				// Calculate distances and sort by distance
-				const locationsWithDistance = workLocations.map((loc) => {
-					const distance = calculateDistance(
-						currentLat,
-						currentLng,
-						loc.lat,
-						loc.lng
-					);
-					return { ...loc, distance };
-				});
-
-				locationsWithDistance.sort((a, b) => a.distance - b.distance);
-
-				// Render distance list
+				// Show loading state
 				container.style.display = "block";
-				listEl.innerHTML = locationsWithDistance
-					.map((loc) => {
-						const badgeClass = getDistanceBadgeClass(loc.distance);
-						const icon = getLocationIcon(loc.name);
-						return `
-							<div class="distance-item">
-								<span class="loc-name">
-									<i class="fa-solid fa-${icon}"></i>
-									${loc.name}
-								</span>
-								<span class="distance-badge ${badgeClass}">
-									${formatDistance(loc.distance)}
-								</span>
+				listEl.innerHTML = `
+					<div class="no-locations-msg">
+						<i class="fa-solid fa-spinner fa-spin"></i> Loading work locations...
+					</div>
+				`;
+
+				try {
+					// Fetch work locations from Google Sheets
+					const response = await fetch(
+						`${SCRIPT_URL}?action=getWorkLocations&studentId=${STUDENT_ID}&t=${Date.now()}`,
+						{ cache: "no-cache" }
+					);
+					const result = await response.json();
+
+					const workLocations = result.success
+						? result.data.locations || []
+						: [];
+
+					// Store work locations data globally
+					workLocationsData = workLocations;
+
+					if (workLocations.length === 0) {
+						isLocationValid = false;
+						nearestLocation = null;
+						updateSubmitButtonState();
+						listEl.innerHTML = `
+							<div class="no-locations-msg" style="color: #e74c3c;">
+								<i class="fa-solid fa-exclamation-triangle"></i> No work locations saved.
+								<br><strong>You cannot mark attendance without work locations.</strong>
+								<br><a href="workLocations.html">Add work locations</a>
 							</div>
 						`;
-					})
-					.join("");
+						return;
+					}
+
+					// Calculate distances and sort by distance
+					const locationsWithDistance = workLocations.map((loc) => {
+						const distance = calculateDistance(
+							currentLat,
+							currentLng,
+							loc.lat,
+							loc.lng
+						);
+						return { ...loc, distance };
+					});
+
+					locationsWithDistance.sort(
+						(a, b) => a.distance - b.distance
+					);
+
+					// Check if user is within allowed distance of any location
+					nearestLocation = locationsWithDistance[0];
+					isLocationValid =
+						nearestLocation.distance <= MAX_ALLOWED_DISTANCE;
+					updateSubmitButtonState();
+
+					// Render distance list
+					const validityMessage = isLocationValid
+						? `<div class="location-status valid">
+							<i class="fa-solid fa-circle-check"></i>
+							You are within ${MAX_ALLOWED_DISTANCE}m of "${nearestLocation.name}" - Attendance allowed
+						   </div>`
+						: `<div class="location-status invalid">
+							<i class="fa-solid fa-circle-xmark"></i>
+							Too far from work locations (min ${MAX_ALLOWED_DISTANCE}m required)
+						   </div>`;
+
+					listEl.innerHTML =
+						locationsWithDistance
+							.map((loc) => {
+								const badgeClass = getDistanceBadgeClass(
+									loc.distance
+								);
+								const icon = getLocationIcon(loc.name);
+								const isWithinRange =
+									loc.distance <= MAX_ALLOWED_DISTANCE;
+								return `
+								<div class="distance-item" style="${
+									isWithinRange
+										? "border-color: #00b894;"
+										: ""
+								}">
+									<span class="loc-name">
+										<i class="fa-solid fa-${icon}" style="${
+									isWithinRange ? "color: #00b894;" : ""
+								}"></i>
+										${loc.name}
+										${
+											isWithinRange
+												? '<i class="fa-solid fa-check-circle" style="color: #00b894; margin-left: 5px;"></i>'
+												: ""
+										}
+									</span>
+									<span class="distance-badge ${badgeClass}">
+										${formatDistance(loc.distance)}
+									</span>
+								</div>
+							`;
+							})
+							.join("") + validityMessage;
+				} catch (error) {
+					console.error("Error fetching work locations:", error);
+					isLocationValid = false;
+					nearestLocation = null;
+					workLocationsData = [];
+					updateSubmitButtonState();
+					listEl.innerHTML = `
+						<div class="no-locations-msg" style="color: #e74c3c;">
+							<i class="fa-solid fa-exclamation-circle"></i> Error loading locations
+							<br><strong>Cannot verify work location.</strong>
+							<br><a href="workLocations.html">Manage locations</a>
+						</div>
+					`;
+				}
 			}
 
 			/**
@@ -824,6 +962,25 @@
 				)
 					return "graduation-cap";
 				return "map-pin";
+			}
+
+			/**
+			 * Update submit button state based on location validity
+			 */
+			function updateSubmitButtonState() {
+				const submitBtn = elements.submitBtn;
+
+				if (isLocationValid) {
+					submitBtn.disabled = false;
+					submitBtn.style.background = "var(--success)";
+					submitBtn.innerHTML =
+						'<i class="fa-solid fa-check"></i> Submit Attendance';
+				} else {
+					submitBtn.disabled = true;
+					submitBtn.style.background = "#ccc";
+					submitBtn.innerHTML =
+						'<i class="fa-solid fa-location-crosshairs"></i> Too Far From Work Location';
+				}
 			}
 
 			/**
@@ -879,10 +1036,10 @@
 
 				// Initialize Camera
 				try {
-					const stream = await navigator.mediaDevices.getUserMedia({
+					cameraStream = await navigator.mediaDevices.getUserMedia({
 						video: true,
 					});
-					elements.video.srcObject = stream;
+					elements.video.srcObject = cameraStream;
 
 					// Optional: Capture photo after 2 seconds
 					setTimeout(() => {
@@ -964,6 +1121,26 @@
 					"Verification cleared. You can now re-capture your data."
 				);
 			});
+
+			// Cancel Button - Stop camera and go back
+			elements.cancelBtn.addEventListener("click", () => {
+				stopCamera();
+				elements.steps.classList.add("hidden");
+				elements.markBtn.classList.remove("hidden");
+			});
+
+			/**
+			 * Stop camera stream
+			 */
+			function stopCamera() {
+				if (cameraStream) {
+					cameraStream.getTracks().forEach((track) => track.stop());
+					cameraStream = null;
+				}
+				if (elements.video.srcObject) {
+					elements.video.srcObject = null;
+				}
+			}
 
 			// Submit Button
 			elements.submitBtn.addEventListener("click", submitAttendance);

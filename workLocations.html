@@ -487,12 +487,15 @@
 
 		<script>
 			// ========== CONFIGURATION ==========
-			const STORAGE_KEY = "work_locations";
+			const SCRIPT_URL =
+				"https://script.google.com/macros/s/AKfycbymTY8hN8f2zDA66SRsAnW_w4LV6bxRjKzFxngUlld21K0ANXTlYi1zlqQLIzkMgeU23Q/exec";
+			const STUDENT_ID = "STU001"; // This should come from login session
 
 			// ========== STATE ==========
 			let map = null;
 			let marker = null;
 			let savedLocations = [];
+			let isLoading = false;
 
 			// ========== DOM ELEMENTS ==========
 			const elements = {
@@ -522,34 +525,45 @@
 			}
 
 			/**
-			 * Load locations from localStorage
+			 * Show loading state in location list
 			 */
-			function loadLocations() {
-				const stored = localStorage.getItem(STORAGE_KEY);
-				savedLocations = stored ? JSON.parse(stored) : [];
-				renderLocationList();
+			function showLoadingState() {
+				elements.locationList.innerHTML = `
+					<div class="empty-state">
+						<i class="fa-solid fa-spinner fa-spin"></i>
+						<p>Loading locations...</p>
+					</div>
+				`;
 			}
 
 			/**
-			 * Save locations to localStorage
+			 * Load locations from Google Sheets
 			 */
-			function saveLocations() {
-				localStorage.setItem(
-					STORAGE_KEY,
-					JSON.stringify(savedLocations)
-				);
-			}
+			async function loadLocations() {
+				try {
+					showLoadingState();
+					const response = await fetch(
+						`${SCRIPT_URL}?action=getWorkLocations&studentId=${STUDENT_ID}&t=${Date.now()}`,
+						{ cache: "no-cache" }
+					);
+					const result = await response.json();
 
-			/**
-			 * Generate unique ID
-			 */
-			function generateId() {
-				return (
-					"loc_" +
-					Date.now() +
-					"_" +
-					Math.random().toString(36).substr(2, 9)
-				);
+					if (result.success) {
+						savedLocations = result.data.locations || [];
+					} else {
+						savedLocations = [];
+						console.warn(
+							"Failed to load locations:",
+							result.message
+						);
+					}
+					renderLocationList();
+				} catch (error) {
+					console.error("Error loading locations:", error);
+					savedLocations = [];
+					renderLocationList();
+					showToast("Error loading locations", true);
+				}
 			}
 
 			/**
@@ -636,9 +650,9 @@
 			// ========== CRUD OPERATIONS ==========
 
 			/**
-			 * Add new location
+			 * Add new location to Google Sheets
 			 */
-			function addLocation() {
+			async function addLocation() {
 				const name = elements.nameInput.value.trim();
 				const lat = parseFloat(elements.latInput.value);
 				const lng = parseFloat(elements.lngInput.value);
@@ -653,24 +667,49 @@
 					return;
 				}
 
-				const newLocation = {
-					id: generateId(),
-					name: name,
-					lat: lat,
-					lng: lng,
-					createdAt: new Date().toISOString(),
-				};
+				if (isLoading) return;
+				isLoading = true;
+				elements.saveBtn.disabled = true;
+				elements.saveBtn.innerHTML =
+					'<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
 
-				savedLocations.push(newLocation);
-				saveLocations();
-				renderLocationList();
+				try {
+					const payload = {
+						action: "addWorkLocation",
+						studentId: STUDENT_ID,
+						name: name,
+						lat: lat,
+						lng: lng,
+					};
 
-				// Clear form
-				elements.nameInput.value = "";
-				elements.latInput.value = "";
-				elements.lngInput.value = "";
+					await fetch(SCRIPT_URL, {
+						method: "POST",
+						mode: "no-cors",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(payload),
+					});
 
-				showToast(`"${name}" added successfully!`);
+					// Wait for data to be saved
+					await new Promise((resolve) => setTimeout(resolve, 1500));
+
+					// Clear form
+					elements.nameInput.value = "";
+					elements.latInput.value = "";
+					elements.lngInput.value = "";
+
+					// Reload locations from server
+					await loadLocations();
+
+					showToast(`"${name}" added successfully!`);
+				} catch (error) {
+					console.error("Error adding location:", error);
+					showToast("Error adding location", true);
+				} finally {
+					isLoading = false;
+					elements.saveBtn.disabled = false;
+					elements.saveBtn.innerHTML =
+						'<i class="fa-solid fa-save"></i> Save Location';
+				}
 			}
 
 			/**
@@ -687,15 +726,35 @@
 			}
 
 			/**
-			 * Delete location
+			 * Delete location from Google Sheets
 			 */
-			function deleteLocation(id) {
+			async function deleteLocation(id) {
 				const loc = savedLocations.find((l) => l.id === id);
-				if (confirm(`Delete "${loc.name}"?`)) {
-					savedLocations = savedLocations.filter((l) => l.id !== id);
-					saveLocations();
-					renderLocationList();
+				if (!confirm(`Delete "${loc.name}"?`)) return;
+
+				try {
+					const payload = {
+						action: "deleteWorkLocation",
+						locationId: id,
+					};
+
+					await fetch(SCRIPT_URL, {
+						method: "POST",
+						mode: "no-cors",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(payload),
+					});
+
+					// Wait for deletion
+					await new Promise((resolve) => setTimeout(resolve, 1000));
+
+					// Reload locations
+					await loadLocations();
+
 					showToast(`"${loc.name}" deleted`);
+				} catch (error) {
+					console.error("Error deleting location:", error);
+					showToast("Error deleting location", true);
 				}
 			}
 

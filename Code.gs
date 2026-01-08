@@ -6,6 +6,7 @@
 // ========== CONFIGURATION ==========
 const SHEET_NAME = "Attendance Records";
 const STUDENTS_SHEET = "Students";
+const WORK_LOCATIONS_SHEET = "Work Locations";
 
 /**
  * Initialize the spreadsheet with required sheets and headers
@@ -89,6 +90,9 @@ function doGet(e) {
 			case "verifyData":
 				return verifyData(e.parameter.studentId);
 
+			case "getWorkLocations":
+				return getWorkLocations(e.parameter.studentId);
+
 			default:
 				return createResponse(false, "Invalid action");
 		}
@@ -112,6 +116,12 @@ function doPost(e) {
 
 			case "updateStudent":
 				return updateStudent(data);
+
+			case "addWorkLocation":
+				return addWorkLocation(data);
+
+			case "deleteWorkLocation":
+				return deleteWorkLocation(data);
 
 			default:
 				return createResponse(false, "Invalid action");
@@ -543,4 +553,147 @@ function checkCurrentState() {
 	}
 
 	Logger.log("========== STATE CHECK COMPLETE ==========");
+}
+
+// ========== WORK LOCATIONS FUNCTIONS ==========
+
+/**
+ * Get all work locations for a student
+ * @param {string} studentId - Student identifier
+ */
+function getWorkLocations(studentId) {
+	try {
+		const ss = SpreadsheetApp.getActiveSpreadsheet();
+		const sheet = ss.getSheetByName(WORK_LOCATIONS_SHEET);
+
+		if (!sheet) {
+			return createResponse(false, "Work Locations sheet not found", {
+				locations: [],
+			});
+		}
+
+		const lastRow = sheet.getLastRow();
+		if (lastRow < 2) {
+			return createResponse(true, "No locations found", {
+				locations: [],
+			});
+		}
+
+		const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+		const locations = [];
+
+		for (let i = 0; i < data.length; i++) {
+			// Column A: Location ID, B: Student ID, C: Name, D: Lat, E: Lng
+			if (data[i][1] === studentId) {
+				locations.push({
+					id: data[i][0],
+					studentId: data[i][1],
+					name: data[i][2],
+					lat: data[i][3],
+					lng: data[i][4],
+				});
+			}
+		}
+
+		return createResponse(true, "Locations retrieved", {
+			locations: locations,
+		});
+	} catch (error) {
+		return createResponse(false, "Error: " + error.message, {
+			locations: [],
+		});
+	}
+}
+
+/**
+ * Add a new work location
+ * @param {Object} data - Location data { studentId, name, lat, lng }
+ */
+function addWorkLocation(data) {
+	try {
+		const ss = SpreadsheetApp.getActiveSpreadsheet();
+		let sheet = ss.getSheetByName(WORK_LOCATIONS_SHEET);
+
+		// Create sheet if it doesn't exist
+		if (!sheet) {
+			sheet = ss.insertSheet(WORK_LOCATIONS_SHEET);
+			sheet.appendRow([
+				"Location ID",
+				"Student ID",
+				"Name",
+				"Latitude",
+				"Longitude",
+			]);
+			sheet
+				.getRange("A1:E1")
+				.setFontWeight("bold")
+				.setBackground("#6c5ce7")
+				.setFontColor("#ffffff");
+		}
+
+		// Generate unique location ID
+		const locationId =
+			"LOC_" + Date.now() + "_" + Math.random().toString(36).substr(2, 6);
+
+		// Add new location
+		sheet.appendRow([
+			locationId,
+			data.studentId,
+			data.name,
+			data.lat,
+			data.lng,
+		]);
+
+		SpreadsheetApp.flush();
+
+		return createResponse(true, "Location added successfully", {
+			location: {
+				id: locationId,
+				studentId: data.studentId,
+				name: data.name,
+				lat: data.lat,
+				lng: data.lng,
+			},
+		});
+	} catch (error) {
+		return createResponse(false, "Error adding location: " + error.message);
+	}
+}
+
+/**
+ * Delete a work location
+ * @param {Object} data - { locationId }
+ */
+function deleteWorkLocation(data) {
+	try {
+		const ss = SpreadsheetApp.getActiveSpreadsheet();
+		const sheet = ss.getSheetByName(WORK_LOCATIONS_SHEET);
+
+		if (!sheet) {
+			return createResponse(false, "Work Locations sheet not found");
+		}
+
+		const lastRow = sheet.getLastRow();
+		if (lastRow < 2) {
+			return createResponse(false, "No locations to delete");
+		}
+
+		const locationIds = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+
+		// Find and delete the row
+		for (let i = 0; i < locationIds.length; i++) {
+			if (locationIds[i][0] === data.locationId) {
+				sheet.deleteRow(i + 2); // +2 because array is 0-indexed and row 1 is header
+				SpreadsheetApp.flush();
+				return createResponse(true, "Location deleted successfully");
+			}
+		}
+
+		return createResponse(false, "Location not found");
+	} catch (error) {
+		return createResponse(
+			false,
+			"Error deleting location: " + error.message
+		);
+	}
 }
