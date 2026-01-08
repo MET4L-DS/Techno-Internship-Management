@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>ManageThem - Work Locations</title>
+
+		<link
+			href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap"
+			rel="stylesheet"
+		/>
+		<link
+			rel="stylesheet"
+			href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+		/>
+
+		<!-- Map Dependency -->
+		<link
+			rel="stylesheet"
+			href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+			integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+			crossorigin=""
+		/>
+		<script
+			src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+			integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+			crossorigin=""
+		></script>
+
+		<style>
+			:root {
+				--primary: #4a90e2;
+				--primary-hover: #357abd;
+				--bg-gradient: linear-gradient(
+					135deg,
+					#f5f7fa 0%,
+					#c3cfe2 100%
+				);
+				--surface: #ffffff;
+				--text-main: #2d3436;
+				--text-muted: #636e72;
+				--border: #dfe6e9;
+				--shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+				--toggle-icon: "🌙";
+				--card-bg: #ffffff;
+				--success: #00b894;
+				--danger: #e74c3c;
+				--warning: #f39c12;
+			}
+
+			body.dark-mode {
+				--primary: #5fa8ff;
+				--bg-gradient: linear-gradient(
+					135deg,
+					#0f2027 0%,
+					#203a43 50%,
+					#2c5364 100%
+				);
+				--surface: #1e1e1e;
+				--text-main: #e0e0e0;
+				--text-muted: #a0a0a0;
+				--border: #444;
+				--shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+				--toggle-icon: "☀️";
+				--card-bg: #2d2d2d;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			body {
+				font-family: "Poppins", sans-serif;
+				background: var(--bg-gradient);
+				margin: 0;
+				padding: 15px;
+				color: var(--text-main);
+				min-height: 100vh;
+				transition: all 0.3s ease;
+			}
+
+			.container {
+				max-width: 1000px;
+				margin: 40px auto;
+				background: var(--surface);
+				padding: 30px;
+				border-radius: 20px;
+				box-shadow: var(--shadow);
+				position: relative;
+			}
+
+			/* --- NAVIGATION --- */
+			.nav-header {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				margin-bottom: 30px;
+			}
+
+			.back-btn {
+				text-decoration: none;
+				color: var(--text-muted);
+				font-size: 14px;
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				transition: color 0.2s;
+			}
+
+			.back-btn:hover {
+				color: var(--primary);
+			}
+
+			.theme-toggle {
+				background: transparent;
+				border: 2px solid var(--border);
+				border-radius: 50%;
+				width: 35px;
+				height: 35px;
+				cursor: pointer;
+				color: var(--text-main);
+			}
+			.theme-toggle::after {
+				content: var(--toggle-icon);
+			}
+
+			header {
+				text-align: center;
+				margin-bottom: 30px;
+			}
+
+			header h2 {
+				margin: 0;
+			}
+
+			header p {
+				color: var(--text-muted);
+				font-size: 14px;
+			}
+
+			/* Grid Layout */
+			.grid-layout {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: 25px;
+			}
+
+			@media (max-width: 768px) {
+				.grid-layout {
+					grid-template-columns: 1fr;
+				}
+			}
+
+			.dash-card {
+				background: var(--card-bg);
+				border: 1px solid var(--border);
+				border-radius: 16px;
+				padding: 20px;
+			}
+
+			.dash-card h3 {
+				margin-top: 0;
+				display: flex;
+				align-items: center;
+				gap: 10px;
+			}
+
+			/* Map */
+			#location-map {
+				height: 300px;
+				width: 100%;
+				border-radius: 12px;
+				margin-bottom: 15px;
+				border: 1px solid var(--border);
+			}
+
+			/* Form */
+			.form-group {
+				margin-bottom: 15px;
+			}
+
+			.form-group label {
+				display: block;
+				font-size: 13px;
+				font-weight: 500;
+				margin-bottom: 5px;
+				color: var(--text-muted);
+			}
+
+			.form-group input {
+				width: 100%;
+				padding: 12px 15px;
+				border: 1px solid var(--border);
+				border-radius: 10px;
+				font-size: 14px;
+				font-family: inherit;
+				background: var(--surface);
+				color: var(--text-main);
+				transition: border-color 0.2s;
+			}
+
+			.form-group input:focus {
+				outline: none;
+				border-color: var(--primary);
+			}
+
+			.coord-row {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: 10px;
+			}
+
+			/* Buttons */
+			.action-btn {
+				background: var(--primary);
+				color: white;
+				border: none;
+				padding: 12px 20px;
+				border-radius: 10px;
+				font-size: 14px;
+				font-weight: 600;
+				cursor: pointer;
+				width: 100%;
+				transition: 0.3s;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 8px;
+			}
+
+			.action-btn:hover {
+				transform: translateY(-2px);
+				filter: brightness(1.1);
+			}
+
+			.action-btn.success {
+				background: var(--success);
+			}
+
+			.action-btn.secondary {
+				background: transparent;
+				border: 1px solid var(--border);
+				color: var(--text-main);
+			}
+
+			.btn-row {
+				display: flex;
+				gap: 10px;
+				margin-top: 15px;
+			}
+
+			.btn-row .action-btn {
+				flex: 1;
+			}
+
+			/* Location List */
+			.location-list {
+				max-height: 400px;
+				overflow-y: auto;
+			}
+
+			.location-item {
+				background: var(--surface);
+				border: 1px solid var(--border);
+				border-radius: 12px;
+				padding: 15px;
+				margin-bottom: 10px;
+				display: flex;
+				align-items: center;
+				gap: 15px;
+				transition: all 0.2s;
+			}
+
+			.location-item:hover {
+				border-color: var(--primary);
+				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+			}
+
+			.location-icon {
+				width: 45px;
+				height: 45px;
+				background: linear-gradient(135deg, var(--primary), #6c5ce7);
+				border-radius: 12px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				color: white;
+				font-size: 18px;
+				flex-shrink: 0;
+			}
+
+			.location-info {
+				flex: 1;
+			}
+
+			.location-info h4 {
+				margin: 0 0 5px 0;
+				font-size: 15px;
+			}
+
+			.location-info p {
+				margin: 0;
+				font-size: 12px;
+				color: var(--text-muted);
+			}
+
+			.location-actions {
+				display: flex;
+				gap: 8px;
+			}
+
+			.icon-btn {
+				width: 35px;
+				height: 35px;
+				border: none;
+				border-radius: 8px;
+				cursor: pointer;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				transition: 0.2s;
+			}
+
+			.icon-btn.view {
+				background: rgba(74, 144, 226, 0.1);
+				color: var(--primary);
+			}
+
+			.icon-btn.delete {
+				background: rgba(231, 76, 60, 0.1);
+				color: var(--danger);
+			}
+
+			.icon-btn:hover {
+				transform: scale(1.1);
+			}
+
+			/* Empty State */
+			.empty-state {
+				text-align: center;
+				padding: 40px 20px;
+				color: var(--text-muted);
+			}
+
+			.empty-state i {
+				font-size: 48px;
+				margin-bottom: 15px;
+				opacity: 0.5;
+			}
+
+			/* Helper Text */
+			.helper-text {
+				font-size: 12px;
+				color: var(--text-muted);
+				margin-top: 10px;
+				display: flex;
+				align-items: center;
+				gap: 6px;
+			}
+
+			/* Toast Notification */
+			.toast {
+				position: fixed;
+				bottom: 30px;
+				right: 30px;
+				background: var(--success);
+				color: white;
+				padding: 15px 25px;
+				border-radius: 12px;
+				box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				transform: translateY(100px);
+				opacity: 0;
+				transition: all 0.3s ease;
+				z-index: 1000;
+			}
+
+			.toast.show {
+				transform: translateY(0);
+				opacity: 1;
+			}
+
+			.toast.error {
+				background: var(--danger);
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<div class="nav-header">
+				<a href="studentDashboard.html" class="back-btn">
+					<i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+				</a>
+				<button class="theme-toggle" id="themeBtn"></button>
+			</div>
+
+			<header>
+				<h2>
+					<i class="fa-solid fa-map-location-dot"></i> Work Locations
+				</h2>
+				<p>
+					Manage your authorized work locations for attendance
+					verification
+				</p>
+			</header>
+
+			<div class="grid-layout">
+				<!-- Add Location Card -->
+				<div class="dash-card">
+					<h3>
+						<i class="fa-solid fa-plus-circle"></i> Add Location
+					</h3>
+
+					<div id="location-map"></div>
+
+					<div class="form-group">
+						<label for="location-name">Location Name</label>
+						<input
+							type="text"
+							id="location-name"
+							placeholder="e.g., Office, Home, Client Site"
+						/>
+					</div>
+
+					<div class="coord-row">
+						<div class="form-group">
+							<label for="location-lat">Latitude</label>
+							<input
+								type="number"
+								id="location-lat"
+								step="any"
+								placeholder="28.6139"
+							/>
+						</div>
+						<div class="form-group">
+							<label for="location-lng">Longitude</label>
+							<input
+								type="number"
+								id="location-lng"
+								step="any"
+								placeholder="77.2090"
+							/>
+						</div>
+					</div>
+
+					<div class="btn-row">
+						<button
+							class="action-btn secondary"
+							id="use-current-btn"
+						>
+							<i class="fa-solid fa-crosshairs"></i> Use Current
+						</button>
+						<button
+							class="action-btn success"
+							id="save-location-btn"
+						>
+							<i class="fa-solid fa-save"></i> Save Location
+						</button>
+					</div>
+
+					<p class="helper-text">
+						<i class="fa-solid fa-info-circle"></i>
+						Click on the map or use your current location
+					</p>
+				</div>
+
+				<!-- Saved Locations Card -->
+				<div class="dash-card">
+					<h3>
+						<i class="fa-solid fa-bookmark"></i> Saved Locations
+					</h3>
+
+					<div class="location-list" id="location-list">
+						<!-- Locations will be dynamically inserted here -->
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Toast Notification -->
+		<div class="toast" id="toast">
+			<i class="fa-solid fa-check-circle"></i>
+			<span id="toast-message">Location saved!</span>
+		</div>
+
+		<script>
+			// ========== CONFIGURATION ==========
+			const STORAGE_KEY = "work_locations";
+
+			// ========== STATE ==========
+			let map = null;
+			let marker = null;
+			let savedLocations = [];
+
+			// ========== DOM ELEMENTS ==========
+			const elements = {
+				nameInput: document.getElementById("location-name"),
+				latInput: document.getElementById("location-lat"),
+				lngInput: document.getElementById("location-lng"),
+				saveBtn: document.getElementById("save-location-btn"),
+				useCurrentBtn: document.getElementById("use-current-btn"),
+				locationList: document.getElementById("location-list"),
+				themeBtn: document.getElementById("themeBtn"),
+				toast: document.getElementById("toast"),
+				toastMessage: document.getElementById("toast-message"),
+			};
+
+			// ========== UTILITY FUNCTIONS ==========
+
+			/**
+			 * Show toast notification
+			 */
+			function showToast(message, isError = false) {
+				elements.toastMessage.textContent = message;
+				elements.toast.classList.toggle("error", isError);
+				elements.toast.classList.add("show");
+				setTimeout(() => {
+					elements.toast.classList.remove("show");
+				}, 3000);
+			}
+
+			/**
+			 * Load locations from localStorage
+			 */
+			function loadLocations() {
+				const stored = localStorage.getItem(STORAGE_KEY);
+				savedLocations = stored ? JSON.parse(stored) : [];
+				renderLocationList();
+			}
+
+			/**
+			 * Save locations to localStorage
+			 */
+			function saveLocations() {
+				localStorage.setItem(
+					STORAGE_KEY,
+					JSON.stringify(savedLocations)
+				);
+			}
+
+			/**
+			 * Generate unique ID
+			 */
+			function generateId() {
+				return (
+					"loc_" +
+					Date.now() +
+					"_" +
+					Math.random().toString(36).substr(2, 9)
+				);
+			}
+
+			/**
+			 * Update map marker position
+			 */
+			function updateMarker(lat, lng) {
+				if (marker) {
+					marker.setLatLng([lat, lng]);
+				} else {
+					marker = L.marker([lat, lng], { draggable: true }).addTo(
+						map
+					);
+					marker.on("dragend", function (e) {
+						const pos = e.target.getLatLng();
+						elements.latInput.value = pos.lat.toFixed(6);
+						elements.lngInput.value = pos.lng.toFixed(6);
+					});
+				}
+				map.setView([lat, lng], 15);
+			}
+
+			/**
+			 * Render the location list
+			 */
+			function renderLocationList() {
+				if (savedLocations.length === 0) {
+					elements.locationList.innerHTML = `
+						<div class="empty-state">
+							<i class="fa-solid fa-map-marker-alt"></i>
+							<p>No locations saved yet.<br>Add your first work location!</p>
+						</div>
+					`;
+					return;
+				}
+
+				elements.locationList.innerHTML = savedLocations
+					.map(
+						(loc, index) => `
+					<div class="location-item" data-id="${loc.id}">
+						<div class="location-icon">
+							<i class="fa-solid fa-${getLocationIcon(loc.name)}"></i>
+						</div>
+						<div class="location-info">
+							<h4>${loc.name}</h4>
+							<p><i class="fa-solid fa-location-dot"></i> ${loc.lat.toFixed(
+								4
+							)}, ${loc.lng.toFixed(4)}</p>
+						</div>
+						<div class="location-actions">
+							<button class="icon-btn view" onclick="viewLocation('${
+								loc.id
+							}')" title="View on map">
+								<i class="fa-solid fa-eye"></i>
+							</button>
+							<button class="icon-btn delete" onclick="deleteLocation('${
+								loc.id
+							}')" title="Delete">
+								<i class="fa-solid fa-trash"></i>
+							</button>
+						</div>
+					</div>
+				`
+					)
+					.join("");
+			}
+
+			/**
+			 * Get appropriate icon based on location name
+			 */
+			function getLocationIcon(name) {
+				const nameLower = name.toLowerCase();
+				if (nameLower.includes("office") || nameLower.includes("work"))
+					return "building";
+				if (nameLower.includes("home")) return "house";
+				if (nameLower.includes("client")) return "handshake";
+				if (
+					nameLower.includes("school") ||
+					nameLower.includes("college")
+				)
+					return "graduation-cap";
+				return "map-pin";
+			}
+
+			// ========== CRUD OPERATIONS ==========
+
+			/**
+			 * Add new location
+			 */
+			function addLocation() {
+				const name = elements.nameInput.value.trim();
+				const lat = parseFloat(elements.latInput.value);
+				const lng = parseFloat(elements.lngInput.value);
+
+				if (!name) {
+					showToast("Please enter a location name", true);
+					return;
+				}
+
+				if (isNaN(lat) || isNaN(lng)) {
+					showToast("Please enter valid coordinates", true);
+					return;
+				}
+
+				const newLocation = {
+					id: generateId(),
+					name: name,
+					lat: lat,
+					lng: lng,
+					createdAt: new Date().toISOString(),
+				};
+
+				savedLocations.push(newLocation);
+				saveLocations();
+				renderLocationList();
+
+				// Clear form
+				elements.nameInput.value = "";
+				elements.latInput.value = "";
+				elements.lngInput.value = "";
+
+				showToast(`"${name}" added successfully!`);
+			}
+
+			/**
+			 * View location on map
+			 */
+			function viewLocation(id) {
+				const loc = savedLocations.find((l) => l.id === id);
+				if (loc) {
+					updateMarker(loc.lat, loc.lng);
+					elements.nameInput.value = loc.name;
+					elements.latInput.value = loc.lat;
+					elements.lngInput.value = loc.lng;
+				}
+			}
+
+			/**
+			 * Delete location
+			 */
+			function deleteLocation(id) {
+				const loc = savedLocations.find((l) => l.id === id);
+				if (confirm(`Delete "${loc.name}"?`)) {
+					savedLocations = savedLocations.filter((l) => l.id !== id);
+					saveLocations();
+					renderLocationList();
+					showToast(`"${loc.name}" deleted`);
+				}
+			}
+
+			// ========== EVENT HANDLERS ==========
+
+			// Save button
+			elements.saveBtn.addEventListener("click", addLocation);
+
+			// Use current location button
+			elements.useCurrentBtn.addEventListener("click", () => {
+				if (navigator.geolocation) {
+					navigator.geolocation.getCurrentPosition(
+						(position) => {
+							const lat = position.coords.latitude;
+							const lng = position.coords.longitude;
+							elements.latInput.value = lat.toFixed(6);
+							elements.lngInput.value = lng.toFixed(6);
+							updateMarker(lat, lng);
+							showToast("Current location detected!");
+						},
+						(error) => {
+							showToast(
+								"Could not get location: " + error.message,
+								true
+							);
+						}
+					);
+				} else {
+					showToast("Geolocation not supported", true);
+				}
+			});
+
+			// Theme toggle
+			elements.themeBtn.addEventListener("click", () => {
+				document.body.classList.toggle("dark-mode");
+				localStorage.setItem(
+					"theme",
+					document.body.classList.contains("dark-mode")
+						? "dark"
+						: "light"
+				);
+			});
+
+			// ========== INITIALIZATION ==========
+
+			// Apply saved theme
+			if (localStorage.getItem("theme") === "dark") {
+				document.body.classList.add("dark-mode");
+			}
+
+			// Initialize map
+			window.addEventListener("load", () => {
+				// Default to a central location
+				const defaultLat = 28.6139;
+				const defaultLng = 77.209;
+
+				map = L.map("location-map").setView(
+					[defaultLat, defaultLng],
+					12
+				);
+				L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+					attribution: "© OpenStreetMap",
+				}).addTo(map);
+
+				// Map click handler
+				map.on("click", function (e) {
+					const lat = e.latlng.lat;
+					const lng = e.latlng.lng;
+					elements.latInput.value = lat.toFixed(6);
+					elements.lngInput.value = lng.toFixed(6);
+					updateMarker(lat, lng);
+				});
+
+				// Try to get current location on load
+				if (navigator.geolocation) {
+					navigator.geolocation.getCurrentPosition(
+						(position) => {
+							const lat = position.coords.latitude;
+							const lng = position.coords.longitude;
+							map.setView([lat, lng], 14);
+						},
+						() => {
+							// Silently fail, use default
+						}
+					);
+				}
+
+				// Load saved locations
+				loadLocations();
+			});
+		</script>
+	</body>
+</html>

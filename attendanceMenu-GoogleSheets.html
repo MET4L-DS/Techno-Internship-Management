@@ -250,6 +250,70 @@
 				color: var(--primary);
 			}
 
+			/* Work Locations Distance Styles */
+			.work-locations-section {
+				margin-top: 10px;
+				border-top: 1px dashed var(--border);
+				padding-top: 5px;
+			}
+
+			.distance-item {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 8px 10px;
+				background: var(--surface);
+				border-radius: 8px;
+				margin-bottom: 6px;
+				border: 1px solid var(--border);
+			}
+
+			.distance-item .loc-name {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				font-weight: 500;
+				font-size: 12px;
+			}
+
+			.distance-item .loc-name i {
+				color: var(--primary);
+			}
+
+			.distance-badge {
+				padding: 4px 10px;
+				border-radius: 20px;
+				font-size: 11px;
+				font-weight: 600;
+			}
+
+			.distance-badge.nearby {
+				background: rgba(0, 184, 148, 0.15);
+				color: #00b894;
+			}
+
+			.distance-badge.moderate {
+				background: rgba(243, 156, 18, 0.15);
+				color: #f39c12;
+			}
+
+			.distance-badge.far {
+				background: rgba(231, 76, 60, 0.15);
+				color: #e74c3c;
+			}
+
+			.no-locations-msg {
+				text-align: center;
+				padding: 10px;
+				color: var(--text-muted);
+				font-size: 11px;
+			}
+
+			.no-locations-msg a {
+				color: var(--primary);
+				text-decoration: none;
+			}
+
 			.theme-toggle {
 				background: transparent;
 				border: 2px solid var(--border);
@@ -365,6 +429,26 @@
 										><i class="fa-solid fa-cloud"></i>
 										<span id="weath">--°C</span></span
 									>
+								</div>
+
+								<!-- Work Locations Distance -->
+								<div
+									id="work-locations-distance"
+									class="work-locations-section"
+									style="display: none"
+								>
+									<p
+										style="
+											font-size: 12px;
+											font-weight: 600;
+											margin: 12px 0 8px 0;
+											color: var(--text-main);
+										"
+									>
+										<i class="fa-solid fa-building"></i>
+										Distance from Work Locations
+									</p>
+									<div id="distance-list"></div>
 								</div>
 							</div>
 
@@ -631,6 +715,118 @@
 			}
 
 			/**
+			 * Calculate distance between two coordinates using Haversine formula
+			 * @returns distance in meters
+			 */
+			function calculateDistance(lat1, lng1, lat2, lng2) {
+				const R = 6371000; // Earth's radius in meters
+				const dLat = ((lat2 - lat1) * Math.PI) / 180;
+				const dLng = ((lng2 - lng1) * Math.PI) / 180;
+				const a =
+					Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+					Math.cos((lat1 * Math.PI) / 180) *
+						Math.cos((lat2 * Math.PI) / 180) *
+						Math.sin(dLng / 2) *
+						Math.sin(dLng / 2);
+				const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+				return R * c;
+			}
+
+			/**
+			 * Format distance for display
+			 */
+			function formatDistance(meters) {
+				if (meters < 1000) {
+					return Math.round(meters) + " m";
+				}
+				return (meters / 1000).toFixed(2) + " km";
+			}
+
+			/**
+			 * Get distance badge class based on distance
+			 */
+			function getDistanceBadgeClass(meters) {
+				if (meters <= 100) return "nearby";
+				if (meters <= 500) return "moderate";
+				return "far";
+			}
+
+			/**
+			 * Load work locations and display distances
+			 */
+			function displayWorkLocationDistances(currentLat, currentLng) {
+				const container = document.getElementById(
+					"work-locations-distance"
+				);
+				const listEl = document.getElementById("distance-list");
+
+				// Load saved work locations from localStorage
+				const stored = localStorage.getItem("work_locations");
+				const workLocations = stored ? JSON.parse(stored) : [];
+
+				if (workLocations.length === 0) {
+					container.style.display = "block";
+					listEl.innerHTML = `
+						<div class="no-locations-msg">
+							<i class="fa-solid fa-info-circle"></i> No work locations saved.
+							<br><a href="workLocations.html">Add work locations</a>
+						</div>
+					`;
+					return;
+				}
+
+				// Calculate distances and sort by distance
+				const locationsWithDistance = workLocations.map((loc) => {
+					const distance = calculateDistance(
+						currentLat,
+						currentLng,
+						loc.lat,
+						loc.lng
+					);
+					return { ...loc, distance };
+				});
+
+				locationsWithDistance.sort((a, b) => a.distance - b.distance);
+
+				// Render distance list
+				container.style.display = "block";
+				listEl.innerHTML = locationsWithDistance
+					.map((loc) => {
+						const badgeClass = getDistanceBadgeClass(loc.distance);
+						const icon = getLocationIcon(loc.name);
+						return `
+							<div class="distance-item">
+								<span class="loc-name">
+									<i class="fa-solid fa-${icon}"></i>
+									${loc.name}
+								</span>
+								<span class="distance-badge ${badgeClass}">
+									${formatDistance(loc.distance)}
+								</span>
+							</div>
+						`;
+					})
+					.join("");
+			}
+
+			/**
+			 * Get icon based on location name
+			 */
+			function getLocationIcon(name) {
+				const nameLower = name.toLowerCase();
+				if (nameLower.includes("office") || nameLower.includes("work"))
+					return "building";
+				if (nameLower.includes("home")) return "house";
+				if (nameLower.includes("client")) return "handshake";
+				if (
+					nameLower.includes("school") ||
+					nameLower.includes("college")
+				)
+					return "graduation-cap";
+				return "map-pin";
+			}
+
+			/**
 			 * Update chart with new data
 			 */
 			function updateChart(presentCount, absentCount, percentage) {
@@ -747,6 +943,9 @@
 					}
 					document.getElementById("weath").innerText =
 						attendanceData.weather;
+
+					// Display distances from work locations
+					displayWorkLocationDistances(lat, lng);
 				});
 
 				// Initialize Signature Pad
